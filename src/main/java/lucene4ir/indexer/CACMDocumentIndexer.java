@@ -1,10 +1,7 @@
 package lucene4ir.indexer;
 
-import org.apache.lucene.document.Document;
-import org.apache.lucene.document.Field;
-import org.apache.lucene.document.StringField;
-import org.apache.lucene.document.TextField;
-import org.apache.lucene.index.IndexWriter;
+import lucene4ir.LuceneConstants;
+import org.apache.lucene.document.*;
 
 import java.io.BufferedReader;
 import java.io.FileReader;
@@ -14,30 +11,57 @@ import java.io.FileReader;
  */
 public class CACMDocumentIndexer extends DocumentIndexer {
 
-    public CACMDocumentIndexer(String indexPath){
-        writer = null;
-        createWriter(indexPath);
+    private Field docnumField;
+    private Field titleField;
+    private Field textField;
+    private Field authorField;
+    private Field pubdateField;
+    private Document doc;
+
+    public CACMDocumentIndexer(String indexPath, String tokenFilterFile){
+        super(indexPath, tokenFilterFile);
+
+        // Reusable document object to reduce GC overhead
+        doc = new Document();
+        initFields();
+        initCacmDoc();
     }
 
-    public static Document createCacmDocument(String docid, String title, String content, String author, String pubdate){
-        Document doc = new Document();
-        Field docnumField = new StringField("docnum", docid, Field.Store.YES);
+    private void initFields() {
+        docnumField = new IntPoint(LuceneConstants.FIELD_DOCNUM, 0);
+        titleField = new TextField(LuceneConstants.FIELD_TITLE, "", Field.Store.YES);
+        textField = new TextField(LuceneConstants.FIELD_CONTENT, "", Field.Store.YES);
+        authorField = new TextField(LuceneConstants.FIELD_AUTHOR, "", Field.Store.YES);
+        pubdateField = new StringField(LuceneConstants.FIELD_PUBDATE, "", Field.Store.YES);
+    }
+
+    private void initCacmDoc() {
         doc.add(docnumField);
-        Field titleField = new StringField("title", title, Field.Store.YES);
         doc.add(titleField);
-        Field textField = new TextField("content", content, Field.Store.YES);
         doc.add(textField);
-        Field authorField = new TextField("author", author, Field.Store.YES);
         doc.add(authorField);
-        Field pubdateField = new StringField("pubdate", pubdate, Field.Store.YES);
         doc.add(pubdateField);
+    }
+
+    public Document createCacmDocument(String docid, String title, String author, String content, String pubdate){
+
+        docnumField.setIntValue(Integer.parseInt(docid));
+        titleField.setStringValue(title);
+        authorField.setStringValue(author);
+        textField.setStringValue(content);
+        pubdateField.setStringValue(pubdate);
+
+        doc.add(docnumField);
+        doc.add(titleField);
+        doc.add(textField);
+        doc.add(authorField);
+        doc.add(pubdateField);
+
         return doc;
     }
 
 
     public void indexDocumentsFromFile(String filename){
-
-
 
         try {
             BufferedReader br = new BufferedReader(new FileReader(filename));
@@ -57,14 +81,15 @@ public class CACMDocumentIndexer extends DocumentIndexer {
                     if (line.startsWith(".I")){
                         // if there is an existing document, create doc, and add to index
                         if (fields[0] != ""){
-                            Document doc = createCacmDocument(fields[0],fields[1],fields[2],fields[3],fields[4]);
+                            doc.clear();
+                            doc = createCacmDocument(fields[0],fields[1],fields[2],fields[3],fields[4]);
                             addDocumentToIndex(doc);
 
                             /*
                             System.out.println("Title: " + fields[1]);
                             System.out.println("Authors: " + fields[2]);
-                            System.out.println("Pub Date: " + fields[4]);
                             System.out.println("Abstract: " + fields[3]);
+                            System.out.println("Pub Date: " + fields[4]);
                             */
                         }
 

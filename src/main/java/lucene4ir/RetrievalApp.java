@@ -1,22 +1,26 @@
 package lucene4ir;
 
-import javax.xml.bind.JAXB;
-import java.io.*;
-
 import org.apache.lucene.analysis.Analyzer;
-import org.apache.lucene.analysis.standard.StandardAnalyzer;
+import org.apache.lucene.document.Document;
 import org.apache.lucene.index.DirectoryReader;
 import org.apache.lucene.index.IndexReader;
 import org.apache.lucene.queryparser.classic.ParseException;
-import org.apache.lucene.search.similarities.*;
-import org.apache.lucene.search.similarities.LMSimilarity.CollectionModel;
-import org.apache.lucene.search.IndexSearcher;
-import org.apache.lucene.store.FSDirectory;
 import org.apache.lucene.queryparser.classic.QueryParser;
+import org.apache.lucene.search.IndexSearcher;
 import org.apache.lucene.search.Query;
 import org.apache.lucene.search.ScoreDoc;
 import org.apache.lucene.search.TopDocs;
-import org.apache.lucene.document.Document;
+import org.apache.lucene.search.similarities.*;
+import org.apache.lucene.search.similarities.LMSimilarity.CollectionModel;
+import org.apache.lucene.store.FSDirectory;
+
+import lucene4ir.similarity.SMARTBNNBNNSimilarity;
+import lucene4ir.similarity.OKAPIBM25Similarity;
+import lucene4ir.similarity.BM25LSimilarity;
+import lucene4ir.similarity.BM25Similarity;
+
+import javax.xml.bind.JAXB;
+import java.io.*;
 
 /**
  * Created by leif on 22/08/2016.
@@ -32,10 +36,9 @@ public class RetrievalApp {
     private QueryParser parser;
     private CollectionModel colModel;
 
-
-
     private enum SimModel {
-        DEF, BM25, LMD, LMJ, PL2, TFIDF
+        DEF, BM25, BM25L, LMD, LMJ, PL2, TFIDF,
+	OKAPIBM25, SMARTBNNBNN
     }
 
     private SimModel sim;
@@ -50,29 +53,37 @@ public class RetrievalApp {
                 System.out.println("<model>"+value.name()+"</model>");
             }
             sim = SimModel.DEF;
-
         }
     }
-
 
     public void selectSimilarityFunction(SimModel sim){
         colModel = null;
         switch(sim){
+            case OKAPIBM25:
+                System.out.println("OKAPI BM25 Similarity Function");
+                simfn = new OKAPIBM25Similarity(1.2f, 0.75f);
+                break;
+            case SMARTBNNBNN:
+                System.out.println("SMART bnn.bnn Similarity Function");
+                simfn = new SMARTBNNBNNSimilarity();
             case BM25:
                 System.out.println("BM25 Similarity Function");
-                simfn = new BM25Similarity(p.k,p.b);
+                simfn = new BM25Similarity(p.k, p.b);
                 break;
-
+            case BM25L:
+                System.out.println("BM25L Similarity Function");
+                simfn = new BM25LSimilarity(p.k, p.b, p.delta);
+                break;
             case LMD:
                 System.out.println("LM Dirichlet Similarity Function");
                 colModel = new LMSimilarity.DefaultCollectionModel();
-                simfn = new LMDirichletSimilarity(colModel,p.mu);
+                simfn = new LMDirichletSimilarity(colModel, p.mu);
                 break;
 
             case LMJ:
                 System.out.println("LM Jelinek Mercer Similarity Function");
                 colModel = new LMSimilarity.DefaultCollectionModel();
-                simfn = new LMJelinekMercerSimilarity(colModel,p.lam);
+                simfn = new LMJelinekMercerSimilarity(colModel, p.lam);
                 break;
 
             case PL2:
@@ -80,7 +91,7 @@ public class RetrievalApp {
                 BasicModel bm = new BasicModelP();
                 AfterEffect ae = new AfterEffectL();
                 Normalization nn = new NormalizationH2(p.c);
-                simfn = new DFRSimilarity(bm,ae,nn);
+                simfn = new DFRSimilarity(bm, ae, nn);
                 break;
 
             default:
@@ -90,8 +101,6 @@ public class RetrievalApp {
                 break;
         }
     }
-
-
 
     public void readParamsFromFile(String paramFile){
         /*
@@ -117,6 +126,7 @@ public class RetrievalApp {
         if (p.b == 0.0){ p.b = 0.75f;}
         if (p.beta == 0.0){p.beta = 500f;}
         if (p.k ==0.0){ p.k = 1.2f;}
+        if (p.delta==0.0){p.delta = 1.0f;}
         if (p.lam==0.0){p.lam = 0.5f;}
         if (p.mu==0.0){p.mu = 500f;}
         if (p.c==0.0){p.c=10.0f;}
@@ -187,9 +197,6 @@ public class RetrievalApp {
             System.out.println(" caught a " + e.getClass() +
                     "\n with message: " + e.getMessage());
         }
-
-
-
     }
 
     public ScoreDoc[] runQuery(String qno, String queryTerms){
@@ -215,8 +222,6 @@ public class RetrievalApp {
         return hits;
     }
 
-
-
     public RetrievalApp(String retrievalParamFile){
         System.out.println("Retrieval App");
         readParamsFromFile(retrievalParamFile);
@@ -227,7 +232,7 @@ public class RetrievalApp {
             // create similarity function and parameter
             selectSimilarityFunction(sim);
             searcher.setSimilarity(simfn);
-            analyzer = new StandardAnalyzer();
+            analyzer = LuceneConstants.ANALYZER;
 
             parser = new QueryParser("content", analyzer);
 
@@ -238,14 +243,6 @@ public class RetrievalApp {
         }
 
     }
-
-
-
-
-
-
-
-
 
     public static void main(String []args) {
 
@@ -281,6 +278,7 @@ class RetrievalParams {
     public float beta;
     public float mu;
     public float c;
+    public float delta;
     public String runTag;
 }
 

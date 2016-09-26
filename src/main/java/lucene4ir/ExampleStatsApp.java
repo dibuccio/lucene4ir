@@ -5,6 +5,11 @@ import java.io.File;
 import java.io.IOException;
 import java.nio.file.Paths;
 
+import java.util.HashSet;
+import java.util.Set;
+
+import org.apache.lucene.analysis.standard.StandardAnalyzer;
+import org.apache.lucene.index.memory.MemoryIndex;
 import org.apache.lucene.document.Document;
 import org.apache.lucene.index.*;
 import org.apache.lucene.store.FSDirectory;
@@ -77,8 +82,8 @@ public class ExampleStatsApp {
 
      public void numSegments(){
         // how do we get the number of segements
-         int segements = reader.leaves().size();
-         System.out.println("Number of Segments in Index");
+         int segments = reader.leaves().size();
+         System.out.println("Number of Segments in Index: " + segments);
 
          // you can use a writer to force merge - and then you will only
          // have one segment
@@ -118,6 +123,9 @@ public class ExampleStatsApp {
     }
 
     public void docLength(int docid) throws IOException{
+        /*
+        The direct index must be stored for this to work... how do we store it, though?
+         */
 
         Terms t = reader.getTermVector(docid, "title");
 
@@ -138,6 +146,14 @@ public class ExampleStatsApp {
 
 
     public void termPostingsList(String field, String termText)  throws IOException {
+        /*
+            Note this method only iterates through the termpostings of the first segement
+            in the index i.e. reader.leaves().get(0).reader();
+
+            To go through all term postings list for a term, you need to iterate over
+            both the segements, and the leafreaders.
+           */
+
 
             LeafReader leafReader = reader.leaves().get(0).reader();
             Terms terms = leafReader.terms(field);
@@ -193,6 +209,40 @@ public class ExampleStatsApp {
             System.out.println("Term: "+termText+", Term Freq. = "+termFreq+", Doc Freq. = "+docFreq);
 
     }
+
+
+    public void buildTermVector(int docid) throws IOException {
+        /*
+
+        */
+
+        Set<String> fieldList = new HashSet<>();
+        fieldList.add("content");
+
+        Document doc = reader.document(docid, fieldList);
+        MemoryIndex mi = MemoryIndex.fromDocument(doc, new StandardAnalyzer());
+        IndexReader mr = mi.createSearcher().getIndexReader();
+
+        Terms t = mr.leaves().get(0).reader().terms("content");
+
+        if ((t != null) && (t.size()>0)) {
+            TermsEnum te = t.iterator();
+            BytesRef term = null;
+
+            System.out.println(t.size());
+
+            while ((term = te.next()) != null) {
+                System.out.println("BytesRef: " + term.utf8ToString());
+                System.out.println("docFreq: " + te.docFreq());
+                System.out.println("totalTermFreq: " + te.totalTermFreq());
+
+            }
+
+        }
+    }
+
+
+
 
     public void iterateThroughDocTermVector(int docid)  throws IOException{
     /*
@@ -263,6 +313,7 @@ public class ExampleStatsApp {
 
         statsApp.iterateThroughDocTermVector(1);
         statsApp.docLength(1);
+        statsApp.numSegments();
 
 
 
